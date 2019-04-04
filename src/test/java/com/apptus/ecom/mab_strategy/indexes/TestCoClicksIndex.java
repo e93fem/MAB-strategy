@@ -8,26 +8,28 @@ public class TestCoClicksIndex {
 
     @Test
     public void testConverters() {
-
-        CoClicksIndex coClicksIndex = new CoClicksIndex();
-        ChunkHandler chunkHandler = new ChunkHandler();
-        Chunk expectChunk1 = new Chunk(0, 2, 0, 2, coClicksIndex);
-        chunkHandler.addChunk(expectChunk1);
-        Chunk expectChunk2 = new Chunk(2, Integer.MAX_VALUE, 0, 2, coClicksIndex);
-        chunkHandler.addChunk(expectChunk2);
-        Chunk expectChunk3 = new Chunk(2, Integer.MAX_VALUE, 2, Integer.MAX_VALUE, coClicksIndex);
-        chunkHandler.addChunk(expectChunk3);
-
-        coClicksIndex.addClicks("1", "2", chunkHandler);
-        coClicksIndex.addClicks("1", "3", chunkHandler);
-        coClicksIndex.addClicks("1", "3", chunkHandler);
-        coClicksIndex.addClicks("1", "3", chunkHandler);
-        coClicksIndex.addSuccess("1", "2", chunkHandler, 1);
-        coClicksIndex.addSuccess("1", "2", chunkHandler, 1);
-        coClicksIndex.addFailure("1", "2", chunkHandler, 1);
-
-        List<String> matches = coClicksIndex.bestMatches("1", 5, chunkHandler, expectChunk1);
-        System.out.println(matches);
+//        ChunkHandler chunkHandler = new ChunkHandler();
+//        chunkHandler.addChunk(new Chunk(0, 4, 0, 4));
+//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4));
+//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE));
+//        chunkHandler.reverse();
+//
+//        CoClicksIndex coClicksIndex = new CoClicksIndex("TestCoClicksIndex", chunkHandler);
+//
+//        coClicksIndex.addClicks("1", "2");
+//        coClicksIndex.addClicks("1", "3");
+//        coClicksIndex.addClicks("1", "3");
+//        coClicksIndex.addClicks("1", "3");
+//        coClicksIndex.addSuccess("1", "2", 1);
+//        System.out.println(coClicksIndex.toString());
+//        coClicksIndex.addSuccess("1", "2", 1);
+//        System.out.println(coClicksIndex.toString());
+//        coClicksIndex.addFailure( "1", "2", 1);
+//        System.out.println(coClicksIndex.toString());
+//
+//        List<History> matches = coClicksIndex.bestMatches("1", 1);
+//        System.out.println(matches);
+//        System.out.println(coClicksIndex.toString());
 
     }
 

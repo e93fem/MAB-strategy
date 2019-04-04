@@ -8,14 +8,12 @@ public class Chunk {
     int maxConf;
     int minSuccess;
     int maxSuccess;
-    CoClicksIndex coClicksIndex;
 
-    public Chunk(int minConf, int maxConf, int minSuccess, int maxSuccess, CoClicksIndex coClicksIndex) {
+    public Chunk(int minConf, int maxConf, int minSuccess, int maxSuccess) {
         this.minConf = minConf;
         this.maxConf = maxConf;
         this.minSuccess = minSuccess;
         this.maxSuccess = maxSuccess;
-        this.coClicksIndex = coClicksIndex;
     }
 
     @Override
@@ -33,10 +31,6 @@ public class Chunk {
                maxSuccess == chunk.maxSuccess;
     }
 
-
-    public CoClicksIndex getCoClicksIndex() {
-        return coClicksIndex;
-    }
 
     @Override
     public int hashCode() {

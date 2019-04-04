@@ -3,9 +3,9 @@ package com.apptus.ecom.mab_strategy.indexes;
 import java.util.Objects;
 
 public class History {
-    int productFrom;
-    int productTo;
-    String productToId;
+    String productTo;
+    String productFrom;
+    int productToId;
 
     int counter;
     double success;
@@ -13,7 +13,7 @@ public class History {
 
     private static long SIZE = 10_000_000;
 
-    public History(int productFrom, int productTo, String productToId) {
+    public History(String productFrom, String productTo, int productToId) {
         this.productFrom = productFrom;
         this.productTo = productTo;
         this.productToId = productToId;
@@ -37,8 +37,16 @@ public class History {
         return Objects.hash(productFrom, productTo);
     }
 
-    public static int externalHashCode(String productFrom, String productTo) {
-        return Objects.hash(productFrom, productTo);
+    public static String getKey(String productFrom, String productTo) {
+        return productFrom + ":" + productTo;
+    }
+
+    public String getProductFrom() {
+        return productFrom;
+    }
+
+    public String getKey() {
+        return getKey(productFrom, productTo);
     }
 
     public double confidence() {
@@ -47,10 +55,21 @@ public class History {
 
     public long rank() {
         if (confidence() == 0) {
-            return counter * SIZE + productTo;
+            return counter * SIZE + productToId;
         } else {
-            return (long) (success / (failure + success) * SIZE * SIZE + counter * SIZE + productTo);
+            return (long) (success / (failure + success) * SIZE * SIZE + counter * SIZE + productToId);
         }
     }
 
+    @Override
+    public String toString() {
+        return "History{" +
+               "productTo='" + productTo + '\'' +
+               ", productFrom='" + productFrom + '\'' +
+               ", productToId=" + productToId +
+               ", counter=" + counter +
+               ", success=" + success +
+               ", failure=" + failure +
+               '}';
+    }
 }

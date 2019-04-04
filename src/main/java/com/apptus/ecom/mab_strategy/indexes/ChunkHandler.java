@@ -1,9 +1,11 @@
 package com.apptus.ecom.mab_strategy.indexes;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ChunkHandler {
 
@@ -36,5 +38,9 @@ public class ChunkHandler {
 
     public Chunk getChunk(double conf, double success) {
         return chunkMap.get((int) (conf > maxConf ? maxConf : conf)).get((int) (success > maxSuccess ? maxSuccess : success));
+    }
+
+    public void reverse() {
+        Collections.reverse(chunkList);
     }
 }

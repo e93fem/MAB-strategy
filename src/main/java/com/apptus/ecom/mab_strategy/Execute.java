@@ -1,37 +1,32 @@
 package com.apptus.ecom.mab_strategy;
 
-import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
-import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.math3.distribution.BetaDistribution;
-import org.eclipse.collections.api.map.primitive.MutableObjectIntMap;
-import org.eclipse.collections.impl.map.mutable.primitive.ObjectIntHashMap;
 
 import com.apptus.ecom.mab_strategy.indexes.Chunk;
 import com.apptus.ecom.mab_strategy.indexes.ChunkHandler;
 import com.apptus.ecom.mab_strategy.indexes.CoClicksIndex;
+import com.apptus.ecom.mab_strategy.indexes.History;
 import com.apptus.ecom.mab_strategy.indexes.TopClicksIndex;
-import com.apptus.esales.event.codec.Event;
-import com.apptus.esales.event.db.EventDatabase;
-import com.apptus.esales.event.db.EventReader;
-import com.apptus.esales.event.db.replicate.Origin;
-import com.apptus.esales.event.log_stream.EventLogStream;
-import com.apptus.esales.event.log_stream.SessionLogEvent;
-import com.apptus.esales.event.log_stream.SessionLogEvent.AddToCart;
-import com.apptus.esales.event.log_stream.SessionLogEvent.Click;
-import com.apptus.esales.event.log_stream.SessionLogEvent.Search;
-import com.apptus.esales.event.signal.Payment;
-import com.apptus.esales.filesystem.DiskFileNode;
 import com.apptus.esales.init.runtime_settings.IntRuntimeSetting;
 
 public class Execute {
+
+    private static final int NUMBER_OF_CANDIDATES = 5;
 
     public enum Scheme {
         FIRST,
@@ -42,19 +37,19 @@ public class Execute {
     }
 
     static class Bandit {
-        Chunk chunk;
+        CoClicksIndex coClicksIndex;
         float alpha;
         float beta;
 
-        public Bandit(Chunk chunk, int alpha, int beta) {
-            this.chunk = chunk;
+        public Bandit(CoClicksIndex coClicksIndex, int alpha, int beta) {
+            this.coClicksIndex = coClicksIndex;
             this.alpha = alpha;
             this.beta = beta;
         }
 
-        public String toString(CoClicksIndex coClicksIndex) {
+        public String toString() {
             return "Bandit{" +
-                   "chunk=" + coClicksIndex.toString(chunk) +
+                   "chunk=" + coClicksIndex.toString() +
                    ", alpha=" + alpha +
                    ", beta=" + beta +
                    ", mean=" + alpha / (alpha + beta) +
@@ -62,90 +57,64 @@ public class Execute {
                    '}';
         }
 
-        public Chunk getChunk() {
-            return chunk;
-        }
-
         public double sample() {
             BetaDistribution betaDistribution = new BetaDistribution(alpha, beta);
             return betaDistribution.sample();
         }
 
+        public CoClicksIndex getCoClicksIndex() {
+            return coClicksIndex;
+        }
     }
 
     static class ClickInfo {
-        String productKey;
         int banditId;
-        Set<String> suggestions;
+        Set<History> suggestions;
+        Set<String> products;
+        String fromProduct;
 
-        public ClickInfo(String productKey, int banditId, Set<String> suggestions) {
-            this.productKey = productKey;
+        public ClickInfo(int banditId, Set<History> suggestions) {
             this.banditId = banditId;
             this.suggestions = suggestions;
+            this.products = suggestions.stream().map(history -> history.getProductFrom()).collect(Collectors.toSet());
+            this.fromProduct = suggestions.iterator().next().getProductFrom();
         }
 
-        public boolean match(String productKey) {
-            return suggestions.contains(productKey);
+        public Pair<Integer, History> match(String productKey) {
+            if (products.contains(productKey)) {
+                return new ImmutablePair<>(banditId, suggestions.stream().filter(
+                        history -> history.getProductFrom().equals(productKey)).findFirst().get());
+            } else {
+                return null;
+            }
         }
     }
 
     private final static IntRuntimeSetting activeDaysSetting = new IntRuntimeSetting(5, 2, 14);
 
     public static void main(String[] args) throws IOException {
-        String logDir = args[0];
+        String logFile = args[0];
         Scheme scheme = Scheme.valueOf(args[1]);
 
-        System.out.println("Execute logs " + logDir);
-        EventDatabase db = new EventDatabase(new DiskFileNode(new File(logDir)),
-                EventLogStream.streams(),
-                Origin.random(), activeDaysSetting);
-        EventReader reader = db.replicated().readEvents();
-
-        CoClicksIndex coClicksIndex = new CoClicksIndex();
-        TopClicksIndex topClicksIndex = new TopClicksIndex();
+        System.out.println("Execute logs " + logFile);
 
         ChunkHandler chunkHandler = new ChunkHandler();
-//        chunkHandler.addChunk(new Chunk(0, 4, 0, 4, topClicksIndex));
-//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4, topClicksIndex));
-//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE, topClicksIndex));
-//        chunkHandler.addChunk(new Chunk(0, 4, 0, 4, coClicksIndex));
-//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4, coClicksIndex));
-//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE, coClicksIndex));
+        addChunk(chunkHandler);
 
-        chunkHandler.addChunk(new Chunk(0, 2, 0, 2, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 0, 2, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 2, 4, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 4, 8, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 0, 2, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 2, 4, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 4, 8, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 8, 16, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 0, 2, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 2, 4, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 4, 8, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 8, 16, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 16, 32, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 32, Integer.MAX_VALUE, coClicksIndex));
-        chunkHandler.addChunk(new Chunk(0, 2, 0, 2, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 0, 2, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 2, 4, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(2, 8, 4, 8, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 0, 2, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 2, 4, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 4, 8, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(8, 16, 8, 16, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 0, 2, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 2, 4, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 4, 8, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 8, 16, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 16, 32, topClicksIndex));
-        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 32, Integer.MAX_VALUE, topClicksIndex));
+        CoClicksIndex coClicksIndex = new CoClicksIndex("coClicksIndex", chunkHandler);
+        TopClicksIndex topClicksIndex = new TopClicksIndex("topClicksIndex", chunkHandler);
+        CoClicksIndex clickPaymentIndex = new CoClicksIndex("clickPaymentIndex", chunkHandler);
+        CoClicksIndex coPaymentIndex = new CoClicksIndex("coPaymentIndex", chunkHandler);
 
         List<Bandit> banditList = new ArrayList<>();
-        chunkHandler.getChunkList().forEach(chunk -> banditList.add(new Bandit(chunk, 1, 1)));
+        banditList.add(new Bandit(coClicksIndex, 1, 1));
+        banditList.add(new Bandit(topClicksIndex, 1, 1));
+        banditList.add(new Bandit(clickPaymentIndex, 1, 1));
+        banditList.add(new Bandit(coPaymentIndex, 1, 1));
 
         double prevAlpha = 0;
         double prevBeta = 0;
+        List<String> events = new ArrayList<>();
 
         int count = 0;
         int sessionLogCount = 0;
@@ -154,65 +123,66 @@ public class Execute {
         int totalClicks = 0;
         int totalAddToCart = 0;
         int totalPayments = 0;
-        Set<String> dates = new HashSet<>();
-        MutableObjectIntMap<String> marketCounts = new ObjectIntHashMap<>();
-        while (reader.read()) {
-            Event event = reader.event();
-            if (event instanceof SessionLogEvent) {
-                SessionLogEvent sessionLogEvent = (SessionLogEvent) event;
-                Timestamp timestamp = new Timestamp(sessionLogEvent.timestamp);
-                Date date = new Date(timestamp.getTime());
-                String dateString = new SimpleDateFormat("yyyy-MM-dd").format(date);
-                dates.add(dateString);
-                marketCounts.addToValue(sessionLogEvent.market, 1);
 
+        BufferedReader br = new BufferedReader(new FileReader(logFile));
+        String row = br.readLine();
+        while (row != null) {
+            if (row.startsWith("START SESSION")) {
+                events = new ArrayList<>();
+            } else if (row.startsWith("END SESSION")) {
+                String searchWord = "";
+                Map<String, List<String>> searchClicks = new HashMap<>();
+                List<String> clicks = new ArrayList<>();
                 List<ClickInfo> clickInfos = new ArrayList<>();
 
-                totalEvents += sessionLogEvent.events().size();
-                for (Object o : sessionLogEvent.events()) {
-                    if (o instanceof Search) {
+                for (String event : events) {
+                    if (event.startsWith("Search:")) {
                         totalSearches++;
-                    } else if (o instanceof Click) {
+                        searchWord = event.substring(7);
+                    } else if (event.startsWith("Click:")) {
                         totalClicks++;
-                        String productKey = ((Click) o).productKey;
+                        String productKey = event.substring(6);
+                        searchClicks.computeIfAbsent(searchWord, k -> new ArrayList<>()).add(productKey);
+                        clicks.add(productKey);
 
                         // Check if part of previous click suggestions
-                        ClickInfo firstClickInfo = null;
-                        ClickInfo lastClickInfo = null;
-                        List<ClickInfo> allClickInfo = new ArrayList<>();
+                        Pair<Integer, History> firstHistory = null;
+                        Pair<Integer, History> lastHistory = null;
+                        List<Pair<Integer, History>> allHistories = new ArrayList<>();
 
                         for (ClickInfo clickInfo : clickInfos) {
-                            if (clickInfo.match(productKey)) {
-                                allClickInfo.add(clickInfo);
-                                if (firstClickInfo == null) {
-                                    firstClickInfo = clickInfo;
+                            Pair<Integer, History> history = clickInfo.match(productKey);
+                            if (history != null) {
+                                allHistories.add(history);
+                                if (firstHistory == null) {
+                                    firstHistory = history;
                                 }
-                                lastClickInfo = clickInfo;
+                                lastHistory = history;
                             }
                         }
-                        if (lastClickInfo != null) {
+                        if (lastHistory != null) {
                             if (scheme == Scheme.FIRST) {
-                                updateReward(chunkHandler, banditList, productKey,
-                                        firstClickInfo, 1);
+                                updateReward(banditList, firstHistory, 1);
                             } else if (scheme == Scheme.LAST) {
-                                updateReward(chunkHandler, banditList, productKey, lastClickInfo, 1);
+                                updateReward(banditList, lastHistory, 1);
                             } else if (scheme == Scheme.EVENLY) {
-                                double reward = 1 / allClickInfo.size();
-                                if (allClickInfo.size() > 1) {
-                                    int i = 0;
-                                }
-                                for (ClickInfo clickInfo : allClickInfo) {
-                                    updateReward(chunkHandler, banditList, productKey, clickInfo, reward);
+                                double reward = 1 / allHistories.size();
+                                for (Pair<Integer, History> history : allHistories) {
+                                    updateReward(banditList, history, reward);
                                 }
                             }
                         }
+
+                        clickInfos.stream().forEach(clickInfo -> clickInfo.suggestions.forEach(suggestion -> banditList.get(
+                                clickInfo.banditId).getCoClicksIndex().addFailure(suggestion, 1)));
 
                         // Generate candidates
                         double bestValue = -1;
                         int bestId = -1;
                         for (int i = 0; i < banditList.size(); i++) {
                             Bandit bandit = banditList.get(i);
-                            if (bandit.getChunk().getCoClicksIndex().containsData(bandit.chunk)) {
+                            CoClicksIndex coClicksIndex1 = bandit.getCoClicksIndex();
+                            if (coClicksIndex1.hasMatches(productKey)) {
                                 double sample = bandit.sample();
                                 if (sample > bestValue) {
                                     bestValue = sample;
@@ -222,50 +192,87 @@ public class Execute {
                         }
                         if (bestId != -1) {
                             Bandit bandit = banditList.get(bestId);
-                            List<String> candidates = bandit.getChunk().getCoClicksIndex().bestMatches(productKey, 1,
-                                    chunkHandler, bandit.chunk);
-                            bandit.beta++;
-                            clickInfos.add(new ClickInfo(productKey, bestId, new HashSet<>(candidates)));
+                            CoClicksIndex coClicksIndex1 = bandit.getCoClicksIndex();
+                            List<History> candidates = coClicksIndex1.bestMatches(productKey, NUMBER_OF_CANDIDATES);
+                            bandit.beta += 1 / (float) NUMBER_OF_CANDIDATES;
+                            clickInfos.add(new ClickInfo(bestId, new HashSet<>(candidates)));
                         }
 
-                    } else if (o instanceof AddToCart) {
+                    } else if (event.startsWith("AddToCart:")) {
                         totalAddToCart++;
-                    } else if (o instanceof Payment) {
+                    } else if (event.startsWith("Payment:")) {
                         totalPayments++;
                     }
-                }
-
-                Set<Click> clicks = new HashSet<>();
-                for (Object o : sessionLogEvent.events()) {
-
-                    if (o instanceof Search) {
-                    } else if (o instanceof Click) {
-                        clicks.add((Click) o);
-                    } else if (o instanceof AddToCart) {
-                    } else if (o instanceof Payment) {
-                    }
 
                 }
-                List<Click> list = new ArrayList<>(clicks);
-                for (int i = 0; i < list.size(); i++) {
-                    for (int j = 0; j < list.size(); j++) {
-                        if (i != j) {
-                            coClicksIndex.addClicks(list.get(i).productKey, list.get(j).productKey, chunkHandler);
-                            topClicksIndex.addClicks(list.get(i).productKey, list.get(j).productKey, chunkHandler);
+
+                // Update indexes
+                String prevClick = null;
+                Set<String> allClicks = new HashSet<>();
+                Set<String> allPayments = new HashSet<>();
+                for (String event : events) {
+                    if (event.startsWith("Search:")) {
+                        searchWord = event.substring(7);
+                    } else if (event.startsWith("Click:")) {
+                        String click = event.substring(6);
+                        allClicks.add(click);
+                        if (prevClick != null) {
+                            coClicksIndex.addClicks(prevClick, click);
+                            topClicksIndex.addClicks(prevClick, click);
+                        }
+                        prevClick = click;
+                    } else if (event.startsWith("Payment:")) {
+                        Set<String> payments = Arrays.stream(event.substring(8).replace("[", "").replace("]", "")
+                                                                  .replaceAll(" ", "").split(",")).collect(
+                                Collectors.toSet());
+                        allPayments.addAll(payments);
+                        for (String oldPayment : allPayments) {
+                            for (String oldPayment2 : allPayments) {
+                                if (!oldPayment.equals(oldPayment2)) {
+                                    coPaymentIndex.addClicks(oldPayment, oldPayment2);
+                                }
+                            }
+                        }
+                        for (String click : allClicks) {
+                            payments.forEach(payment -> clickPaymentIndex.addClicks(click, payment));
                         }
                     }
+
                 }
 
-                if (++sessionLogCount % 100000 == 0) {
+//                Set<String> clicks = new HashSet<>();
+//                Map<String, Set<String>> searchClickMap = new HashMap<>();
+//                searchWord = "";
+//                for (String event : events) {
+//                    if (event.startsWith("Search:")) {
+//                        searchWord = event.substring(7);
+//                    } else if (event.startsWith("Click:")) {
+//                        clicks.add(event.substring(6));
+//                        searchClickMap.computeIfAbsent(searchWord, k -> new HashSet<>()).add(event.substring(6));
+//                    }
+//
+//                }
+//                List<String> list = new ArrayList<>(clicks);
+//                for (int i = 0; i < list.size(); i++) {
+//                    for (int j = 0; j < list.size(); j++) {
+//                        if (i != j) {
+//                            coClicksIndex.addClicks("", list.get(i), list.get(j));
+//                            topClicksIndex.addClicks("", list.get(i), list.get(j));
+//                        }
+//                    }
+//                }
 
+                if (++sessionLogCount % 100000 == 0) {
                     System.out.println(
                             new Date() + ": Read " + sessionLogCount + " sessionlog events and totally " + totalEvents
                             + " events. Searches: " + totalSearches + ", clicks: " + totalClicks + ", addToCarts: "
                             + totalAddToCart + ", payments: " + totalPayments);
-                    System.out.println("Logs: " + dates);
-                    System.out.println("Markets: " + marketCounts);
 
-                    banditList.forEach(r -> System.out.println(r.toString(r.getChunk().getCoClicksIndex())));
+//                    banditList.forEach(
+//                            r -> System.out.println("alpha: " + r.alpha + ", beta: " + r.beta + ", matches: " + (r.alpha / (
+//                                    r.alpha + r.beta)) + "\n" + r.getCoClicksIndex().toString()));
+                    banditList.forEach(
+                            r -> System.out.println(r.toString()));
                     double alphaSum = banditList.stream().mapToDouble(bandit -> bandit.alpha).sum();
                     double betaSum = banditList.stream().mapToDouble(bandit -> bandit.beta).sum();
                     System.out.println(
@@ -278,27 +285,78 @@ public class Execute {
                     prevAlpha = alphaSum;
                     prevBeta = betaSum;
                 }
+
+            } else {
+                events.add(row);
             }
-            if (++count % 100000 == 0) {
-                System.out.println(new Date() + ": Read " + count + " events.");
-            }
+            row = br.readLine();
         }
+
         System.out.println(
                 new Date() + ": Totally read " + count + " events, " + sessionLogCount + " sessionlog events and totally "
                 + totalEvents
                 + " events. Searches: " + totalSearches + ", clicks: " + totalClicks + ", addToCarts: "
                 + totalAddToCart + ", payments: " + totalPayments);
-        System.out.println("Logs: " + dates);
-        System.out.println("Markets: " + marketCounts);
-        db.close();
+        System.out.println(
+                new Date() + ": Read " + sessionLogCount + " sessionlog events and totally " + totalEvents
+                + " events. Searches: " + totalSearches + ", clicks: " + totalClicks + ", addToCarts: "
+                + totalAddToCart + ", payments: " + totalPayments);
+
+//        banditList.forEach(
+//                r -> System.out.println("alpha: " + r.alpha + ", beta: " + r.beta + ", matches: " + (r.alpha / (
+//                        r.alpha + r.beta)) + "\n" + r.getCoClicksIndex().toString()));
+        banditList.forEach(
+                r -> System.out.println(r.toString()));
+        double alphaSum = banditList.stream().mapToDouble(bandit -> bandit.alpha).sum();
+        double betaSum = banditList.stream().mapToDouble(bandit -> bandit.beta).sum();
+        System.out.println(
+                "Total result: alpha: " + alphaSum + ", beta: " + betaSum + ", matches: " + (alphaSum / (
+                        alphaSum + betaSum)));
+        System.out.println(
+                "Total tmp result: alpha: " + (alphaSum - prevAlpha) + ", beta: " + (betaSum - prevBeta)
+                + ", matches: " + ((alphaSum - prevAlpha) / (float) (
+                        (alphaSum - prevAlpha) + (betaSum - prevBeta))));
+        br.close();
+        System.out.println("Done!");
 
     }
 
-    private static void updateReward(ChunkHandler chunkHandler, List<Bandit> banditList,
-                                     String productKey, ClickInfo clickInfo, double reward) {
-        Bandit bandit = banditList.get(clickInfo.banditId);
+    private static void updateReward(List<Bandit> banditList, Pair<Integer, History> firstHistory, double reward) {
+        Bandit bandit = banditList.get(firstHistory.getKey());
         bandit.alpha += reward;
         bandit.beta -= reward;
-        bandit.getChunk().getCoClicksIndex().addSuccess(clickInfo.productKey, productKey, chunkHandler, reward);
+        banditList.get(firstHistory.getKey()).getCoClicksIndex().addSuccess(firstHistory.getValue(), reward);
     }
+
+    private static void addChunk(ChunkHandler chunkHandler) {
+        chunkHandler.addChunk(new Chunk(0, 4, 0, 4));
+        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4));
+        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE));
+
+//        chunkHandler.addChunk(new Chunk(0, 2, 0, 2));
+//        chunkHandler.addChunk(new Chunk(2, 8, 0, 2));
+//        chunkHandler.addChunk(new Chunk(2, 8, 2, 4));
+//        chunkHandler.addChunk(new Chunk(2, 8, 4, 8));
+//        chunkHandler.addChunk(new Chunk(8, 16, 0, 2));
+//        chunkHandler.addChunk(new Chunk(8, 16, 2, 4));
+//        chunkHandler.addChunk(new Chunk(8, 16, 4, 8));
+//        chunkHandler.addChunk(new Chunk(8, 16, 8, 16));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 0, 2));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 2, 4));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 4, 8));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 8, 16));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 16, 32));
+//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 32, Integer.MAX_VALUE));
+
+        chunkHandler.reverse();
+
+    }
+
+//    private static void updateReward(List<Bandit> banditList,
+//                                     String productKey, ClickInfo clickInfo, double reward) {
+//        Bandit bandit = banditList.get(clickInfo.banditId);
+//        bandit.alpha += reward;
+//        bandit.beta -= reward;
+//        bandit.getCoClicksIndex().addSuccess(clickInfo.productKey, productKey, reward);
+//    }
 }
