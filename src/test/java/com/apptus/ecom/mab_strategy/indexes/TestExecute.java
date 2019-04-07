@@ -20,4 +20,13 @@ public class TestExecute {
         Execute.main(new String[]{events.getAbsolutePath(), scheme.toString()});
 
     }
+
+    @Test
+    public void testExecute2() throws URISyntaxException, IOException {
+        File events = new File(getClass().getResource(FILE_PATH + "test2.txt").toURI());
+        Scheme scheme = Scheme.FIRST;
+
+        Execute.main(new String[]{events.getAbsolutePath(), scheme.toString()});
+
+    }
 }

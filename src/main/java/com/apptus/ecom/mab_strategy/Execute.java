@@ -21,12 +21,14 @@ import com.apptus.ecom.mab_strategy.indexes.Chunk;
 import com.apptus.ecom.mab_strategy.indexes.ChunkHandler;
 import com.apptus.ecom.mab_strategy.indexes.CoClicksIndex;
 import com.apptus.ecom.mab_strategy.indexes.History;
+import com.apptus.ecom.mab_strategy.indexes.SearchCoClicksIndex;
 import com.apptus.ecom.mab_strategy.indexes.TopClicksIndex;
 import com.apptus.esales.init.runtime_settings.IntRuntimeSetting;
 
 public class Execute {
 
-    private static final int NUMBER_OF_CANDIDATES = 5;
+//        private static final int NUMBER_OF_CANDIDATES = 1;
+    private static final int NUMBER_OF_CANDIDATES = 3;
 
     public enum Scheme {
         FIRST,
@@ -93,24 +95,28 @@ public class Execute {
     private final static IntRuntimeSetting activeDaysSetting = new IntRuntimeSetting(5, 2, 14);
 
     public static void main(String[] args) throws IOException {
+        long startTime = System.currentTimeMillis();
         String logFile = args[0];
         Scheme scheme = Scheme.valueOf(args[1]);
 
-        System.out.println("Execute logs " + logFile);
-
         ChunkHandler chunkHandler = new ChunkHandler();
         addChunk(chunkHandler);
+
+        System.out.println("Execute logs " + logFile + ". Uses " + NUMBER_OF_CANDIDATES + " candidates and " + scheme + " scheme and " +
+                           chunkHandler.getChunkList().size() + " chunks");
 
         CoClicksIndex coClicksIndex = new CoClicksIndex("coClicksIndex", chunkHandler);
         TopClicksIndex topClicksIndex = new TopClicksIndex("topClicksIndex", chunkHandler);
         CoClicksIndex clickPaymentIndex = new CoClicksIndex("clickPaymentIndex", chunkHandler);
         CoClicksIndex coPaymentIndex = new CoClicksIndex("coPaymentIndex", chunkHandler);
+        SearchCoClicksIndex searchCoClicksIndex = new SearchCoClicksIndex("searchCoClicksIndex", chunkHandler);
 
         List<Bandit> banditList = new ArrayList<>();
         banditList.add(new Bandit(coClicksIndex, 1, 1));
         banditList.add(new Bandit(topClicksIndex, 1, 1));
         banditList.add(new Bandit(clickPaymentIndex, 1, 1));
         banditList.add(new Bandit(coPaymentIndex, 1, 1));
+//        banditList.add(new Bandit(searchCoClicksIndex, 1, 1));
 
         double prevAlpha = 0;
         double prevBeta = 0;
@@ -131,7 +137,7 @@ public class Execute {
                 events = new ArrayList<>();
             } else if (row.startsWith("END SESSION")) {
                 String searchWord = "";
-                Map<String, List<String>> searchClicks = new HashMap<>();
+                Map<String, Set<String>> searchClicks = new HashMap<>();
                 List<String> clicks = new ArrayList<>();
                 List<ClickInfo> clickInfos = new ArrayList<>();
 
@@ -142,7 +148,7 @@ public class Execute {
                     } else if (event.startsWith("Click:")) {
                         totalClicks++;
                         String productKey = event.substring(6);
-                        searchClicks.computeIfAbsent(searchWord, k -> new ArrayList<>()).add(productKey);
+                        searchClicks.computeIfAbsent(searchWord, k -> new HashSet<>()).add(productKey);
                         clicks.add(productKey);
 
                         // Check if part of previous click suggestions
@@ -166,9 +172,28 @@ public class Execute {
                             } else if (scheme == Scheme.LAST) {
                                 updateReward(banditList, lastHistory, 1);
                             } else if (scheme == Scheme.EVENLY) {
-                                double reward = 1 / allHistories.size();
+                                double reward = 1 / (double)allHistories.size();
                                 for (Pair<Integer, History> history : allHistories) {
                                     updateReward(banditList, history, reward);
+                                }
+                            } else if (scheme == Scheme.AGEING_FIRST) {
+                                int sum = 0;
+                                for (int i = 0; i < allHistories.size(); i++) {
+                                    sum += i + 1;
+                                }
+                                for (int i = 0; i < allHistories.size(); i++) {
+                                    Pair<Integer, History> history = allHistories.get(i);
+                                    updateReward(banditList, history, (i + 1) / (double)sum);
+
+                                }
+                            } else if (scheme == Scheme.AGEING_LAST) {
+                                int sum = 0;
+                                for (int i = 0; i < allHistories.size(); i++) {
+                                    sum += i + 1;
+                                }
+                                for (int i = 0; i < allHistories.size(); i++) {
+                                    Pair<Integer, History> history = allHistories.get(allHistories.size() - i - 1);
+                                    updateReward(banditList, history, (i + 1) / (double)sum);
                                 }
                             }
                         }
@@ -210,6 +235,8 @@ public class Execute {
                 String prevClick = null;
                 Set<String> allClicks = new HashSet<>();
                 Set<String> allPayments = new HashSet<>();
+
+                searchClicks = new HashMap<>();
                 for (String event : events) {
                     if (event.startsWith("Search:")) {
                         searchWord = event.substring(7);
@@ -219,8 +246,13 @@ public class Execute {
                         if (prevClick != null) {
                             coClicksIndex.addClicks(prevClick, click);
                             topClicksIndex.addClicks(prevClick, click);
+                            if (searchClicks.getOrDefault(searchWord, new HashSet<>()).contains(prevClick)) {
+                                searchCoClicksIndex.addClicks(searchWord, prevClick, click);
+                            }
+
                         }
                         prevClick = click;
+                        searchClicks.computeIfAbsent(searchWord, k -> new HashSet<>()).add(click);
                     } else if (event.startsWith("Payment:")) {
                         Set<String> payments = Arrays.stream(event.substring(8).replace("[", "").replace("]", "")
                                                                   .replaceAll(" ", "").split(",")).collect(
@@ -268,9 +300,6 @@ public class Execute {
                             + " events. Searches: " + totalSearches + ", clicks: " + totalClicks + ", addToCarts: "
                             + totalAddToCart + ", payments: " + totalPayments);
 
-//                    banditList.forEach(
-//                            r -> System.out.println("alpha: " + r.alpha + ", beta: " + r.beta + ", matches: " + (r.alpha / (
-//                                    r.alpha + r.beta)) + "\n" + r.getCoClicksIndex().toString()));
                     banditList.forEach(
                             r -> System.out.println(r.toString()));
                     double alphaSum = banditList.stream().mapToDouble(bandit -> bandit.alpha).sum();
@@ -302,9 +331,6 @@ public class Execute {
                 + " events. Searches: " + totalSearches + ", clicks: " + totalClicks + ", addToCarts: "
                 + totalAddToCart + ", payments: " + totalPayments);
 
-//        banditList.forEach(
-//                r -> System.out.println("alpha: " + r.alpha + ", beta: " + r.beta + ", matches: " + (r.alpha / (
-//                        r.alpha + r.beta)) + "\n" + r.getCoClicksIndex().toString()));
         banditList.forEach(
                 r -> System.out.println(r.toString()));
         double alphaSum = banditList.stream().mapToDouble(bandit -> bandit.alpha).sum();
@@ -317,7 +343,9 @@ public class Execute {
                 + ", matches: " + ((alphaSum - prevAlpha) / (float) (
                         (alphaSum - prevAlpha) + (betaSum - prevBeta))));
         br.close();
-        System.out.println("Done!");
+        long endTime = System.currentTimeMillis();
+
+        System.out.println("Done! Took " + (endTime - startTime) / 1000 / 60 + " minutes.");
 
     }
 
@@ -329,24 +357,24 @@ public class Execute {
     }
 
     private static void addChunk(ChunkHandler chunkHandler) {
-        chunkHandler.addChunk(new Chunk(0, 4, 0, 4));
-        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4));
-        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE));
+//        chunkHandler.addChunk(new Chunk(0, 4, 0, 4));
+//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 0, 4));
+//        chunkHandler.addChunk(new Chunk(4, Integer.MAX_VALUE, 4, Integer.MAX_VALUE));
 
-//        chunkHandler.addChunk(new Chunk(0, 2, 0, 2));
-//        chunkHandler.addChunk(new Chunk(2, 8, 0, 2));
-//        chunkHandler.addChunk(new Chunk(2, 8, 2, 4));
-//        chunkHandler.addChunk(new Chunk(2, 8, 4, 8));
-//        chunkHandler.addChunk(new Chunk(8, 16, 0, 2));
-//        chunkHandler.addChunk(new Chunk(8, 16, 2, 4));
-//        chunkHandler.addChunk(new Chunk(8, 16, 4, 8));
-//        chunkHandler.addChunk(new Chunk(8, 16, 8, 16));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 0, 2));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 2, 4));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 4, 8));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 8, 16));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 16, 32));
-//        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 32, Integer.MAX_VALUE));
+        chunkHandler.addChunk(new Chunk(0, 2, 0, 2));
+        chunkHandler.addChunk(new Chunk(2, 8, 0, 2));
+        chunkHandler.addChunk(new Chunk(2, 8, 2, 4));
+        chunkHandler.addChunk(new Chunk(2, 8, 4, 8));
+        chunkHandler.addChunk(new Chunk(8, 16, 0, 2));
+        chunkHandler.addChunk(new Chunk(8, 16, 2, 4));
+        chunkHandler.addChunk(new Chunk(8, 16, 4, 8));
+        chunkHandler.addChunk(new Chunk(8, 16, 8, 16));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 0, 2));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 2, 4));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 4, 8));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 8, 16));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 16, 32));
+        chunkHandler.addChunk(new Chunk(16, Integer.MAX_VALUE, 32, Integer.MAX_VALUE));
 
         chunkHandler.reverse();
 

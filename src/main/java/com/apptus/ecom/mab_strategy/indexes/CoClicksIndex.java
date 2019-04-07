@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -45,16 +44,10 @@ public class CoClicksIndex {
 
     public void addClicks(String productFrom, String productTo) {
         History history = getHistory(productFrom, productTo);
-//        if (history.getKey().equals("56512-1_sv_SE:02715-4_sv_SE")) {
-//            System.out.println("Add " + history);
-//        }
         Chunk currentChunk = chunkHandler.getChunk(history.confidence(), history.success);
         chunkSize.addToValue(currentChunk, 1);
         history.counter++;
         if (history.counter == 1) {
-//            if (history.getKey().equals("56512-1_sv_SE:02715-4_sv_SE")) {
-//                System.out.println("Add to " + currentChunk);
-//            }
             TreeMap<Long, History> longHistoryTreeMap = productChunkHistoryMap.computeIfAbsent(currentChunk, h -> new HashMap<>())
                                                                               .computeIfAbsent(history.productFrom,
                                                                                       h -> new TreeMap<>());
@@ -72,10 +65,14 @@ public class CoClicksIndex {
         } else {
             history.failure += value;
         }
+        if (history.failure < 0) {
+            history.failure = 0;
+        }
+
         Chunk chunk = chunkHandler.getChunk(history.confidence(), history.success);
-        if (chunk==null) {
+        if (chunk == null) {
             chunkHandler.getChunk(history.confidence(), history.success);
-            int i=0;
+            int i = 0;
         }
         if (currentChunk != chunk) {
             chunkSize.addToValue(currentChunk, -1);
