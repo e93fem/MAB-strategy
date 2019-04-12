@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <esales.version>3.43.7-SNAPSHOT</esales.version>
+        <!--<esales.version>3.43.7-SNAPSHOT</esales.version>-->
     </properties>
 
 
@@ -27,12 +27,24 @@
             <artifactId>commons-math3</artifactId>
             <version>3.6.1</version>
         </dependency>
-
+        <!-- https://mvnrepository.com/artifact/org.eclipse.collections/eclipse-collections -->
         <dependency>
-            <groupId>com.apptus.ecom</groupId>
-            <artifactId>esales_server_ingredient</artifactId>
-            <version>${esales.version}</version>
+            <groupId>org.eclipse.collections</groupId>
+            <artifactId>eclipse-collections</artifactId>
+            <version>10.0.0.M2</version>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.8.1</version>
+        </dependency>
+
+        <!--<dependency>-->
+            <!--<groupId>com.apptus.ecom</groupId>-->
+            <!--<artifactId>esales_server_ingredient</artifactId>-->
+            <!--<version>${esales.version}</version>-->
+        <!--</dependency>-->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

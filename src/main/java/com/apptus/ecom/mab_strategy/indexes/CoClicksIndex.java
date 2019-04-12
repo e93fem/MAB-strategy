@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -11,13 +12,13 @@ import org.eclipse.collections.impl.map.mutable.primitive.ObjectIntHashMap;
 
 public class CoClicksIndex {
 
-    private HashMap<String, History> historyMap = new HashMap<>();
-    private HashMap<Chunk, Map<String, TreeMap<Long, History>>> productChunkHistoryMap = new HashMap<>();
-    private ObjectIntHashMap<Chunk> chunkSize = new ObjectIntHashMap<>();
+    protected HashMap<String, History> historyMap = new HashMap<>();
+    protected HashMap<Chunk, Map<String, TreeMap<Long, History>>> productChunkHistoryMap = new HashMap<>();
+    protected ObjectIntHashMap<Chunk> chunkSize = new ObjectIntHashMap<>();
 
     ObjectIntHashMap<String> productIdMap = new ObjectIntHashMap<>();
-    private String name;
-    private ChunkHandler chunkHandler;
+    protected String name;
+    protected ChunkHandler chunkHandler;
 
     public CoClicksIndex(String name, ChunkHandler chunkHandler) {
         this.name = name;
@@ -27,7 +28,7 @@ public class CoClicksIndex {
         }
     }
 
-    private int getId(String product) {
+    protected int getId(String product) {
         if (!productIdMap.containsKey(product)) {
             int size = productIdMap.size();
             productIdMap.put(product, size);
@@ -55,8 +56,8 @@ public class CoClicksIndex {
         }
     }
 
-    private void addAction(History history, boolean success,
-                           double value) {
+    protected void addAction(History history, boolean success,
+                             double value) {
         long orgRank = history.rank();
         Chunk currentChunk = chunkHandler.getChunk(history.confidence(), history.success);
         if (success) {
@@ -77,8 +78,8 @@ public class CoClicksIndex {
         if (currentChunk != chunk) {
             chunkSize.addToValue(currentChunk, -1);
             chunkSize.addToValue(chunk, 1);
-            productChunkHistoryMap.get(currentChunk).get(history.productFrom).remove(orgRank);
-            productChunkHistoryMap.get(chunk).computeIfAbsent(history.productFrom, k -> new TreeMap<>())
+            productChunkHistoryMap.get(currentChunk).get(history.getChunkKey()).remove(orgRank);
+            productChunkHistoryMap.get(chunk).computeIfAbsent(history.getChunkKey(), k -> new TreeMap<>())
                                   .put(history.rank(), history);
         }
     }
@@ -91,27 +92,32 @@ public class CoClicksIndex {
         addAction(history, false, value);
     }
 
-    public boolean hasMatches(String thisProduct) {
+    public boolean hasMatches(String searchPhrase, String thisProduct, Set<String> forbidden) {
         for (Chunk chunk : chunkHandler.getChunkList()) {
-            if (productChunkHistoryMap.get(chunk).containsKey(thisProduct)) {
+            if (productChunkHistoryMap.get(chunk).getOrDefault(thisProduct,
+                    new TreeMap<>()).
+                                              values().stream().filter(
+                    searchHistory -> !forbidden.contains(searchHistory.productTo)).count() > 0) {
                 return true;
             }
         }
         return false;
     }
 
-    public List<History> bestMatches(String thisProduct, int maxMatches) {
+    public List<History> bestMatches(String searchPhrase, String thisProduct, int maxMatches, Set<String> forbidden,
+                                     int numberOfCandidates) {
         List<History> collect = new ArrayList<>();
         for (Chunk chunk : chunkHandler.getChunkList()) {
             collect.addAll(productChunkHistoryMap.get(chunk).getOrDefault(thisProduct,
                     new TreeMap<>()).
-                                                         values().stream().limit(maxMatches - collect.size())
+                                                         values().stream().filter(
+                    searchHistory -> !forbidden.contains(searchHistory.productTo)).limit(maxMatches - collect.size())
                                                  .collect(Collectors.toList()));
             if (collect.size() >= maxMatches) {
                 break;
             }
         }
-        collect.forEach(history -> addFailure(history, 1 / (double) maxMatches));
+        collect.forEach(history -> addFailure(history, 1 / (double) numberOfCandidates));
         return collect;
     }
 

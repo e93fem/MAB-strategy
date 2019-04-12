@@ -3,8 +3,8 @@ package com.apptus.ecom.mab_strategy.indexes;
 import java.util.Objects;
 
 public class History {
-    String productTo;
     String productFrom;
+    String productTo;
     int productToId;
 
     int counter;
@@ -17,6 +17,14 @@ public class History {
         this.productFrom = productFrom;
         this.productTo = productTo;
         this.productToId = productToId;
+    }
+
+    public static String getChunkKey(String productFrom) {
+        return productFrom;
+    }
+
+    public String getChunkKey() {
+        return getChunkKey(productFrom);
     }
 
     @Override
@@ -43,6 +51,10 @@ public class History {
 
     public String getProductFrom() {
         return productFrom;
+    }
+
+    public String getProductTo() {
+        return productTo;
     }
 
     public String getKey() {

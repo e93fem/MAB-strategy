@@ -1,5 +1,5 @@
 START SESSION
-Search:Nisse
+Search:Nisse Kalle
 Click:40763-1_sv_SE
 Click:56889-1_sv_SE
 Click:50734-1_sv_SE
@@ -7,7 +7,7 @@ Payment:50734-1_sv_SE
 Click:40763-1_sv_SE
 END SESSION
 START SESSION
-Search:Nisse
+Search:Nisse Kalle
 Click:40763-1_sv_SE
 Search:Kalle
 Click:56889-1_sv_SE

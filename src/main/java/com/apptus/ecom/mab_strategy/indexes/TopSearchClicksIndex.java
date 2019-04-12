@@ -3,15 +3,15 @@ package com.apptus.ecom.mab_strategy.indexes;
 import java.util.List;
 import java.util.Set;
 
-public class TopClicksIndex extends CoClicksIndex {
+public class TopSearchClicksIndex extends SearchCoClicksIndex {
 
-    public TopClicksIndex(String name, ChunkHandler chunkHandler) {
+    public TopSearchClicksIndex(String name, ChunkHandler chunkHandler) {
         super(name, chunkHandler);
     }
 
     @Override
-    public void addClicks(String productFrom, String productTo) {
-        super.addClicks("0", productTo);
+    public void addClicks(String searchPhrase, String productFrom, String productTo) {
+        super.addClicks(searchPhrase, "0", productTo);
     }
 
     @Override
