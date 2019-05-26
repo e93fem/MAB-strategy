@@ -385,7 +385,8 @@ public class Execute {
                             "Total tmp result: alpha: " + (alphaSum - prevAlpha) + ", beta: " + (betaSum - prevBeta)
                             + ", matches: " + ((alphaSum - prevAlpha) / (float) (
                                     (alphaSum - prevAlpha) + (betaSum - prevBeta))));
-                    System.out.println("Matching clicks: " + totalMatchingClicks / (double) totalClicks);
+                    System.out.println("Matching clicks (" + totalMatchingClicks + ", " + totalClicks + "): "
+                                       + totalMatchingClicks / (double) totalClicks);
                     prevAlpha = alphaSum;
                     prevBeta = betaSum;
                 }
@@ -417,7 +418,8 @@ public class Execute {
                 "Total tmp result: alpha: " + (alphaSum - prevAlpha) + ", beta: " + (betaSum - prevBeta)
                 + ", matches: " + ((alphaSum - prevAlpha) / (float) (
                         (alphaSum - prevAlpha) + (betaSum - prevBeta))));
-        System.out.println("Matching clicks: " + totalMatchingClicks / (double) totalClicks);
+        System.out.println("Matching clicks (" + totalMatchingClicks + ", " + totalClicks + "): "
+                           + totalMatchingClicks / (double) totalClicks);
         br.close();
         long endTime = System.currentTimeMillis();
 
